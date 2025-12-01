@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{transfer, Transfer};
 
-declare_id!("BNTYprog11111111111111111111111111111111111");
+declare_id!("HjGFLqUQgkEeXmx7G2m8nAZkqKKX66vp6cSkjnHiidiN");
 
 // Constants
 pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
@@ -35,36 +35,40 @@ pub mod openbounty {
         ctx: Context<CreateBounty>,
         description_hash: String,
         prize_amount: u64,
-        deadline_timestamp: Option<i64>, // Optional deadline
+        deadline_timestamp: Option<i64>,
     ) -> Result<()> {
         require!(
             description_hash.len() <= MAX_DESCRIPTION_HASH_LEN,
             ErrorCode::DescriptionHashTooLong
         );
         require!(prize_amount > 0, ErrorCode::InvalidPrizeAmount);
-
+    
+        // Get account infos BEFORE mutable borrows
+        let treasury_info = ctx.accounts.treasury.to_account_info();
+        let bounty_info = ctx.accounts.bounty.to_account_info();
+        
         let bounty = &mut ctx.accounts.bounty;
         let treasury = &mut ctx.accounts.treasury;
-
+    
         // Transfer creation fee to treasury
         transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
                 Transfer {
                     from: ctx.accounts.company.to_account_info(),
-                    to: ctx.accounts.treasury.to_account_info(),
+                    to: treasury_info, // Use the saved info
                 },
             ),
             BOUNTY_CREATION_FEE,
         )?;
-
+    
         // Transfer prize to bounty escrow
         transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
                 Transfer {
                     from: ctx.accounts.company.to_account_info(),
-                    to: ctx.accounts.bounty.to_account_info(),
+                    to: bounty_info, // Use the saved info
                 },
             ),
             prize_amount,
@@ -105,11 +109,17 @@ pub mod openbounty {
     /// - Winner's reputation updated
     pub fn select_winner(
         ctx: Context<SelectWinner>,
-        submission_hash: String, // IPFS hash of winning submission
+        submission_hash: String,
     ) -> Result<()> {
+        // Get account infos BEFORE any mutable borrows
+        let bounty_info = ctx.accounts.bounty.to_account_info();
+        let treasury_info = ctx.accounts.treasury.to_account_info();
+        let winner_info = ctx.accounts.winner.to_account_info();
+        
         let bounty = &mut ctx.accounts.bounty;
         let treasury = &mut ctx.accounts.treasury;
         let winner_profile = &mut ctx.accounts.winner_profile;
+    
 
         require!(!bounty.completed, ErrorCode::BountyAlreadyCompleted);
         require!(
@@ -134,14 +144,10 @@ pub mod openbounty {
             .ok_or(ErrorCode::MathOverflow)?;
 
         // Transfer platform fee to treasury
-        let bounty_info = ctx.accounts.bounty.to_account_info();
-        let treasury_info = ctx.accounts.treasury.to_account_info();
-        
         **bounty_info.try_borrow_mut_lamports()? -= platform_fee;
         **treasury_info.try_borrow_mut_lamports()? += platform_fee;
 
         // Transfer winner payout
-        let winner_info = ctx.accounts.winner.to_account_info();
         **bounty_info.try_borrow_mut_lamports()? -= winner_payout;
         **winner_info.try_borrow_mut_lamports()? += winner_payout;
 

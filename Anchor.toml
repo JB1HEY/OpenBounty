@@ -6,13 +6,13 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-openbounty = "BNTYprog11111111111111111111111111111111111"
+openbounty = "HjGFLqUQgkEeXmx7G2m8nAZkqKKX66vp6cSkjnHiidiN"
 
 [programs.localnet]
-openbounty = "BNTYprog11111111111111111111111111111111111"
+openbounty = "HjGFLqUQgkEeXmx7G2m8nAZkqKKX66vp6cSkjnHiidiN"
 
 [programs.mainnet]
-openbounty = "BNTYprog11111111111111111111111111111111111"
+openbounty = "HjGFLqUQgkEeXmx7G2m8nAZkqKKX66vp6cSkjnHiidiN"
 
 [registry]
 url = "https://api.apr.dev"
