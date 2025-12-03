@@ -8,6 +8,7 @@ pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 pub const BOUNTY_CREATION_FEE: u64 = 1_000_000; // 0.001 SOL
 pub const PLATFORM_FEE_BPS: u16 = 100; // 1% = 100 basis points
 pub const MAX_DESCRIPTION_HASH_LEN: usize = 64; // For IPFS CID or hash
+pub const ESCROW_EXPIRY_SECONDS: i64 = 15_552_000; // 6 months (180 days)
 
 #[program]
 pub mod openbounty {
@@ -21,6 +22,7 @@ pub mod openbounty {
         treasury.total_bounties_created = 0;
         treasury.total_bounties_completed = 0;
         treasury.total_volume = 0;
+        treasury.total_expired_funds_reclaimed = 0;
         treasury.bump = ctx.bumps.treasury;
         
         msg!("Treasury initialized");
@@ -31,6 +33,7 @@ pub mod openbounty {
     /// - Company pays creation fee (0.001 SOL)
     /// - Prize amount is escrowed in bounty account
     /// - description_hash: IPFS CID or hash of full bounty details stored off-chain
+    /// - Bounty expires after 6 months if no winner is selected
     pub fn create_bounty(
         ctx: Context<CreateBounty>,
         description_hash: String,
@@ -56,7 +59,7 @@ pub mod openbounty {
                 ctx.accounts.system_program.to_account_info(),
                 Transfer {
                     from: ctx.accounts.company.to_account_info(),
-                    to: treasury_info, // Use the saved info
+                    to: treasury_info,
                 },
             ),
             BOUNTY_CREATION_FEE,
@@ -68,11 +71,13 @@ pub mod openbounty {
                 ctx.accounts.system_program.to_account_info(),
                 Transfer {
                     from: ctx.accounts.company.to_account_info(),
-                    to: bounty_info, // Use the saved info
+                    to: bounty_info,
                 },
             ),
             prize_amount,
         )?;
+
+        let current_time = Clock::get()?.unix_timestamp;
 
         // Initialize bounty
         bounty.company = ctx.accounts.company.key();
@@ -81,7 +86,9 @@ pub mod openbounty {
         bounty.deadline_timestamp = deadline_timestamp;
         bounty.winner = None;
         bounty.completed = false;
-        bounty.created_at = Clock::get()?.unix_timestamp;
+        bounty.created_at = current_time;
+        bounty.expiry_timestamp = current_time + ESCROW_EXPIRY_SECONDS; // 6 months from now
+        bounty.expired = false;
         bounty.bump = ctx.bumps.bounty;
 
         // Update treasury stats
@@ -99,6 +106,7 @@ pub mod openbounty {
             .ok_or(ErrorCode::MathOverflow)?;
 
         msg!("Bounty created with prize: {} SOL", prize_amount as f64 / LAMPORTS_PER_SOL as f64);
+        msg!("Bounty will expire on: {}", bounty.expiry_timestamp);
         Ok(())
     }
 
@@ -107,6 +115,7 @@ pub mod openbounty {
     /// - 1% platform fee deducted from prize
     /// - 99% goes to winner
     /// - Winner's reputation updated
+    /// - Can only be called before expiry
     pub fn select_winner(
         ctx: Context<SelectWinner>,
         submission_hash: String,
@@ -120,15 +129,19 @@ pub mod openbounty {
         let treasury = &mut ctx.accounts.treasury;
         let winner_profile = &mut ctx.accounts.winner_profile;
     
-
         require!(!bounty.completed, ErrorCode::BountyAlreadyCompleted);
+        require!(!bounty.expired, ErrorCode::BountyExpired);
         require!(
             ctx.accounts.company.key() == bounty.company,
             ErrorCode::UnauthorizedCompany
         );
 
-        // If deadline exists, can still select winner after deadline
-        // (company might want to reward late submission)
+        // Check if bounty has expired (6 months passed)
+        let current_time = Clock::get()?.unix_timestamp;
+        require!(
+            current_time < bounty.expiry_timestamp,
+            ErrorCode::BountyExpired
+        );
 
         // Calculate fees
         let platform_fee = bounty
@@ -154,7 +167,7 @@ pub mod openbounty {
         // Update bounty
         bounty.winner = Some(ctx.accounts.winner.key());
         bounty.completed = true;
-        bounty.completed_at = Some(Clock::get()?.unix_timestamp);
+        bounty.completed_at = Some(current_time);
         bounty.submission_hash = Some(submission_hash);
 
         // Update winner's profile (increment completions)
@@ -177,6 +190,60 @@ pub mod openbounty {
             "Winner selected! Paid {} SOL (platform fee: {} SOL)",
             winner_payout as f64 / LAMPORTS_PER_SOL as f64,
             platform_fee as f64 / LAMPORTS_PER_SOL as f64
+        );
+
+        Ok(())
+    }
+
+    /// Reclaim expired bounty funds to treasury
+    /// - Can be called by anyone after 6 months
+    /// - Returns all escrowed funds to treasury
+    /// - Marks bounty as expired
+    pub fn reclaim_expired_bounty(ctx: Context<ReclaimExpiredBounty>) -> Result<()> {
+        let bounty_info = ctx.accounts.bounty.to_account_info();
+        let treasury_info = ctx.accounts.treasury.to_account_info();
+        
+        let bounty = &mut ctx.accounts.bounty;
+        let treasury = &mut ctx.accounts.treasury;
+
+        require!(!bounty.completed, ErrorCode::BountyAlreadyCompleted);
+        require!(!bounty.expired, ErrorCode::BountyAlreadyExpired);
+
+        // Check if 6 months have passed
+        let current_time = Clock::get()?.unix_timestamp;
+        require!(
+            current_time >= bounty.expiry_timestamp,
+            ErrorCode::BountyNotExpired
+        );
+
+        // Get the current bounty balance (should be prize_amount + rent)
+        let bounty_balance = bounty_info.lamports();
+        let rent = Rent::get()?.minimum_balance(bounty_info.data_len());
+        let reclaimable_amount = bounty_balance.saturating_sub(rent);
+
+        // Transfer all escrowed funds to treasury
+        **bounty_info.try_borrow_mut_lamports()? -= reclaimable_amount;
+        **treasury_info.try_borrow_mut_lamports()? += reclaimable_amount;
+
+        // Mark bounty as expired
+        bounty.expired = true;
+        bounty.completed_at = Some(current_time);
+
+        // Update treasury stats
+        treasury.total_expired_funds_reclaimed = treasury
+            .total_expired_funds_reclaimed
+            .checked_add(reclaimable_amount)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        msg!(
+            "Expired bounty reclaimed! {} SOL returned to treasury",
+            reclaimable_amount as f64 / LAMPORTS_PER_SOL as f64
+        );
+        msg!(
+            "Bounty created at: {}, expired at: {}, reclaimed at: {}",
+            bounty.created_at,
+            bounty.expiry_timestamp,
+            current_time
         );
 
         Ok(())
@@ -279,6 +346,24 @@ pub struct SelectWinner<'info> {
 }
 
 #[derive(Accounts)]
+pub struct ReclaimExpiredBounty<'info> {
+    #[account(mut)]
+    pub bounty: Account<'info, Bounty>,
+
+    #[account(
+        mut,
+        seeds = [b"treasury"],
+        bump = treasury.bump
+    )]
+    pub treasury: Account<'info, Treasury>,
+
+    /// CHECK: Can be called by anyone
+    pub caller: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct CreateHunterProfile<'info> {
     #[account(
         init,
@@ -307,6 +392,7 @@ pub struct Treasury {
     pub total_bounties_created: u32,
     pub total_bounties_completed: u32,
     pub total_volume: u64,
+    pub total_expired_funds_reclaimed: u64, // NEW: Track reclaimed funds
     pub bump: u8,
 }
 
@@ -324,6 +410,8 @@ pub struct Bounty {
     pub completed_at: Option<i64>,
     #[max_len(64)]
     pub submission_hash: Option<String>, // Winner's submission hash
+    pub expiry_timestamp: i64, // NEW: When escrow expires (6 months)
+    pub expired: bool, // NEW: Whether bounty has expired
     pub bump: u8,
 }
 
@@ -356,4 +444,13 @@ pub enum ErrorCode {
     
     #[msg("Only the company that created the bounty can select a winner")]
     UnauthorizedCompany,
+
+    #[msg("Bounty has expired (6 months passed without winner selection)")]
+    BountyExpired,
+
+    #[msg("Bounty has not expired yet (must wait 6 months)")]
+    BountyNotExpired,
+
+    #[msg("Bounty has already been marked as expired")]
+    BountyAlreadyExpired,
 }

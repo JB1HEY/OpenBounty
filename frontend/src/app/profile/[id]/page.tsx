@@ -147,7 +147,7 @@ export default function ProfilePage() {
         </Card>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <Card className="text-center border-white/5">
             <div className="text-3xl font-bold text-primary">{stats.bountiesCompleted}</div>
             <div className="text-gray-400 mt-1">Bounties Won</div>
@@ -155,14 +155,6 @@ export default function ProfilePage() {
           <Card className="text-center border-white/5">
             <div className="text-3xl font-bold text-primary">{stats.totalSubmissions}</div>
             <div className="text-gray-400 mt-1">Total Submissions</div>
-          </Card>
-          <Card className="text-center border-white/5">
-            <div className="text-3xl font-bold text-primary">
-              {stats.totalSubmissions > 0
-                ? `${Math.round((stats.acceptedSubmissions / stats.totalSubmissions) * 100)}%`
-                : '0%'}
-            </div>
-            <div className="text-gray-400 mt-1">Win Rate</div>
           </Card>
         </div>
 

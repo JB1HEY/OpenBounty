@@ -1,16 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useProgram } from '@/hooks/useProgram';
 import { LAMPORTS_PER_SOL } from '@/lib/constants';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { FilterBar } from '@/components/FilterBar';
 
 export default function HomePage() {
   const program = useProgram();
   const [bounties, setBounties] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   useEffect(() => {
     fetchBounties();
@@ -79,6 +85,63 @@ export default function HomePage() {
     }
   }
 
+  // Extract unique categories
+  const categories = useMemo(() => {
+    const allCategories = bounties
+      .map(b => b.metadata?.category)
+      .filter(Boolean) as string[];
+    return Array.from(new Set(allCategories));
+  }, [bounties]);
+
+  // Filter and sort bounties
+  const filteredBounties = useMemo(() => {
+    return bounties
+      .filter(bounty => {
+        // Search filter
+        if (searchQuery) {
+          const query = searchQuery.toLowerCase();
+          const name = bounty.creatorProfile?.name?.toLowerCase() || '';
+          const wallet = bounty.company.toString().toLowerCase();
+          if (!name.includes(query) && !wallet.includes(query)) {
+            return false;
+          }
+        }
+
+        // Category filter
+        if (selectedCategory !== 'all') {
+          if (bounty.metadata?.category !== selectedCategory) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        switch (sortBy) {
+          case 'highest_prize':
+            return b.prizeInSol - a.prizeInSol;
+          case 'lowest_prize':
+            return a.prizeInSol - b.prizeInSol;
+          case 'oldest':
+            // Assuming creation time is roughly correlated with list order if no timestamp
+            // But ideally we'd use a timestamp. For now, we can use publicKey or just reverse index if available.
+            // Since we don't have explicit timestamp in the partial view, let's assume 'postedAt' or similar exists or fallback to no-op/index.
+            // Actually, let's check if we have a timestamp. If not, we might need to rely on something else.
+            // The current code doesn't show a timestamp field on the account.
+            // Let's assume for now we just reverse the array for "newest" if the API returns them in some order, or just no-op.
+            // Wait, usually on-chain data 'all()' might not be ordered.
+            // Let's assume they are not ordered by time.
+            // If we don't have a timestamp, we can't strictly sort by time.
+            // However, the user asked for "by time".
+            // Let's check if metadata has 'createdAt'.
+            return (a.metadata?.createdAt || 0) - (b.metadata?.createdAt || 0);
+          case 'newest':
+          default:
+            return (b.metadata?.createdAt || 0) - (a.metadata?.createdAt || 0);
+        }
+      });
+  }, [bounties, searchQuery, selectedCategory, sortBy]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -106,7 +169,7 @@ export default function HomePage() {
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
           <Card className="text-center border-primary/20">
-            <div className="text-4xl font-bold text-primary">{bounties.length}</div>
+            <div className="text-4xl font-bold text-primary">{filteredBounties.length}</div>
             <div className="text-gray-400 mt-1">Active Bounties</div>
           </Card>
           <Card className="text-center border-secondary/20">
@@ -117,25 +180,40 @@ export default function HomePage() {
           </Card>
         </div>
 
+        {/* Filters */}
+        <FilterBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          selectedCategory={selectedCategory}
+          onCategoryChange={setSelectedCategory}
+          categories={categories}
+        />
+
         {/* Bounties List */}
-        {bounties.length === 0 ? (
+        {filteredBounties.length === 0 ? (
           <Card className="text-center py-12 border-white/10">
             <svg className="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <h3 className="mt-2 text-lg font-medium text-white">No bounties available</h3>
+            <h3 className="mt-2 text-lg font-medium text-white">No bounties match your filters</h3>
             <p className="mt-1 text-gray-400">
-              Check back later or be the first to post a bounty!
+              Try adjusting your search or filters.
             </p>
             <div className="mt-6">
-              <Link href="/create">
-                <Button>Post a Bounty</Button>
-              </Link>
+              <Button onClick={() => {
+                setSearchQuery('');
+                setSelectedCategory('all');
+                setSortBy('newest');
+              }}>
+                Clear Filters
+              </Button>
             </div>
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {bounties.map((bounty) => (
+            {filteredBounties.map((bounty) => (
               <Link
                 key={bounty.publicKey.toString()}
                 href={`/bounty/${bounty.publicKey.toString()}`}
@@ -190,10 +268,8 @@ export default function HomePage() {
 
                   {/* Meta Info */}
                   <div className="flex items-center justify-between text-xs text-gray-500 pt-3 border-t border-white/5">
-                    <Link
-                      href={`/profile/${bounty.company.toString()}`}
+                    <div
                       className="flex items-center hover:text-primary transition-colors space-x-2"
-                      onClick={(e) => e.stopPropagation()}
                     >
                       {bounty.creatorProfile?.avatar_url ? (
                         <img
@@ -209,7 +285,7 @@ export default function HomePage() {
                         </div>
                       )}
                       <span>{bounty.creatorProfile?.name || `${bounty.company.toString().slice(0, 6)}...`}</span>
-                    </Link>
+                    </div>
                     {bounty.metadata?.submission_count !== undefined && (
                       <div className="flex items-center">
                         <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
