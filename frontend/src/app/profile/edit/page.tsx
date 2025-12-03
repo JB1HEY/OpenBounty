@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useRouter } from 'next/navigation';
+import { Card } from '@/components/ui/Card';
+import { Input, TextArea } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 
 export default function EditProfilePage() {
   const { publicKey } = useWallet();
@@ -11,6 +14,7 @@ export default function EditProfilePage() {
   const [formData, setFormData] = useState({
     name: '',
     bio: '',
+    avatarUrl: '',
     skills: '',
     college: '',
     location: '',
@@ -42,6 +46,7 @@ export default function EditProfilePage() {
           setFormData({
             name: data.profile.name || '',
             bio: data.profile.bio || '',
+            avatarUrl: data.profile.avatar_url || '',
             skills: data.profile.skills?.join(', ') || '',
             college: data.profile.college || '',
             location: data.profile.location || '',
@@ -61,7 +66,7 @@ export default function EditProfilePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
+
     if (!publicKey) {
       setError('Please connect your wallet');
       return;
@@ -79,7 +84,8 @@ export default function EditProfilePage() {
           walletAddress: publicKey.toString(),
           name: formData.name,
           bio: formData.bio,
-          skills: formData.skills 
+          avatarUrl: formData.avatarUrl,
+          skills: formData.skills
             ? formData.skills.split(',').map(s => s.trim()).filter(s => s)
             : [],
           college: formData.college,
@@ -98,7 +104,7 @@ export default function EditProfilePage() {
       }
 
       setSuccess('Profile saved successfully!');
-      
+
       // Redirect to profile page after 1.5 seconds
       setTimeout(() => {
         router.push(`/profile/${publicKey.toString()}`);
@@ -114,226 +120,227 @@ export default function EditProfilePage() {
 
   if (!publicKey) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-12">
-        <div className="bg-white rounded-lg shadow p-8 text-center">
-          <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-          <p className="text-gray-600">
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <Card className="max-w-md w-full text-center py-12">
+          <h2 className="text-2xl font-bold mb-4 text-white">Connect Your Wallet</h2>
+          <p className="text-gray-400">
             Please connect your wallet to edit your profile
           </p>
-        </div>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-12">
-      <div className="bg-white rounded-lg shadow p-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Edit Profile</h1>
-          <button
+    <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background">
+      <div className="max-w-3xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-4xl font-bold text-white tracking-tight">Edit Profile</h1>
+          <Button
+            variant="ghost"
             onClick={() => router.push(`/profile/${publicKey.toString()}`)}
-            className="text-gray-600 hover:text-gray-900 transition"
           >
             Cancel
-          </button>
+          </Button>
         </div>
 
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading profile...</p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Name *
-              </label>
-              <input
-                type="text"
-                required
-                maxLength={100}
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="Your full name"
-              />
+        <Card className="border-primary/20 shadow-[0_0_50px_rgba(59,130,246,0.1)]">
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-4 text-gray-400">Loading profile...</p>
             </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <Input
+                    label="Name *"
+                    required
+                    maxLength={100}
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Your full name"
+                  />
+                </div>
 
-            {/* Bio */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Bio
-              </label>
-              <textarea
-                rows={4}
-                maxLength={500}
-                value={formData.bio}
-                onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="Tell companies about yourself and your experience..."
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                {formData.bio.length} / 500 characters
-              </p>
-            </div>
+                <div className="sm:col-span-2">
+                  <TextArea
+                    label="Bio"
+                    rows={4}
+                    maxLength={500}
+                    value={formData.bio}
+                    onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                    placeholder="Tell companies about yourself and your experience..."
+                  />
+                  <p className="text-xs text-gray-500 mt-1 text-right">
+                    {formData.bio.length} / 500 characters
+                  </p>
+                </div>
 
-            {/* Skills */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Skills
-              </label>
-              <input
-                type="text"
-                value={formData.skills}
-                onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="e.g., React, Solana, Web3, Design (comma separated)"
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                Separate skills with commas
-              </p>
-            </div>
-
-            {/* College */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                College/University
-              </label>
-              <input
-                type="text"
-                maxLength={200}
-                value={formData.college}
-                onChange={(e) => setFormData({ ...formData, college: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="e.g., MIT, Stanford"
-              />
-            </div>
-
-            {/* Location */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Location
-              </label>
-              <input
-                type="text"
-                maxLength={100}
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="e.g., San Francisco, CA"
-              />
-            </div>
-
-            {/* Social Links */}
-            <div className="border-t pt-6">
-              <h3 className="text-lg font-semibold mb-4">Social Links</h3>
-              
-              <div className="space-y-4">
-                {/* Website */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    🌐 Portfolio Website
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Profile Picture
                   </label>
-                  <input
+                  <div className="flex items-center space-x-4">
+                    {formData.avatarUrl && (
+                      <img
+                        src={formData.avatarUrl}
+                        alt="Preview"
+                        className="w-20 h-20 rounded-full object-cover border-2 border-primary"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            // Check file size (max 2MB)
+                            if (file.size > 2 * 1024 * 1024) {
+                              alert('Image must be less than 2MB');
+                              return;
+                            }
+
+                            // Convert to base64
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setFormData({ ...formData, avatarUrl: reader.result as string });
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="block w-full text-sm text-gray-400
+                          file:mr-4 file:py-2 file:px-4
+                          file:rounded-lg file:border-0
+                          file:text-sm file:font-semibold
+                          file:bg-primary/10 file:text-primary
+                          hover:file:bg-primary/20 file:cursor-pointer
+                          cursor-pointer border border-white/10 rounded-lg"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Upload an image (max 2MB). JPG, PNG, or GIF.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <Input
+                    label="Skills"
+                    value={formData.skills}
+                    onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
+                    placeholder="e.g., React, Solana, Web3, Design (comma separated)"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Separate skills with commas
+                  </p>
+                </div>
+
+                <Input
+                  label="College/University"
+                  maxLength={200}
+                  value={formData.college}
+                  onChange={(e) => setFormData({ ...formData, college: e.target.value })}
+                  placeholder="e.g., MIT, Stanford"
+                />
+
+                <Input
+                  label="Location"
+                  maxLength={100}
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  placeholder="e.g., San Francisco, CA"
+                />
+              </div>
+
+              <div className="border-t border-white/10 pt-8">
+                <h3 className="text-lg font-semibold text-white mb-6">Social Links</h3>
+
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  <Input
+                    label="🌐 Portfolio Website"
                     type="url"
                     value={formData.websiteUrl}
                     onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                     placeholder="https://yourwebsite.com"
                   />
-                </div>
 
-                {/* GitHub */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    💻 GitHub Profile
-                  </label>
-                  <input
+                  <Input
+                    label="💻 GitHub Profile"
                     type="url"
                     value={formData.githubUrl}
                     onChange={(e) => setFormData({ ...formData, githubUrl: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                     placeholder="https://github.com/yourusername"
                   />
-                </div>
 
-                {/* LinkedIn */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    💼 LinkedIn Profile
-                  </label>
-                  <input
+                  <Input
+                    label="💼 LinkedIn Profile"
                     type="url"
                     value={formData.linkedinUrl}
                     onChange={(e) => setFormData({ ...formData, linkedinUrl: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                     placeholder="https://linkedin.com/in/yourusername"
                   />
-                </div>
 
-                {/* Twitter */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    🐦 Twitter/X Profile
-                  </label>
-                  <input
+                  <Input
+                    label="🐦 Twitter/X Profile"
                     type="url"
                     value={formData.twitterUrl}
                     onChange={(e) => setFormData({ ...formData, twitterUrl: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                     placeholder="https://twitter.com/yourusername"
                   />
                 </div>
               </div>
-            </div>
 
-            {/* Info Box */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-semibold text-blue-900 mb-2">💡 Profile Tips</h4>
-              <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-                <li>Add your skills so companies can find you for relevant bounties</li>
-                <li>A good bio helps companies understand your background</li>
-                <li>Link your GitHub to showcase your code</li>
-                <li>Your on-chain reputation updates automatically when you win bounties</li>
-              </ul>
-            </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-red-800">{error}</p>
+              {/* Info Box */}
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+                <h4 className="font-semibold text-primary mb-2">💡 Profile Tips</h4>
+                <ul className="text-sm text-gray-300 space-y-1 list-disc list-inside">
+                  <li>Add your skills so companies can find you for relevant bounties</li>
+                  <li>A good bio helps companies understand your background</li>
+                  <li>Link your GitHub to showcase your code</li>
+                  <li>Your on-chain reputation updates automatically when you win bounties</li>
+                </ul>
               </div>
-            )}
 
-            {success && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-green-800">{success}</p>
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                  <p className="text-red-400">{error}</p>
+                </div>
+              )}
+
+              {success && (
+                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
+                  <p className="text-green-400">{success}</p>
+                </div>
+              )}
+
+              <div className="flex space-x-4 pt-4">
+                <Button
+                  type="submit"
+                  disabled={saving}
+                  isLoading={saving}
+                  className="w-full sm:w-auto"
+                >
+                  Save Profile
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.push(`/profile/${publicKey.toString()}`)}
+                  className="w-full sm:w-auto"
+                >
+                  Cancel
+                </Button>
               </div>
-            )}
 
-            <div className="flex space-x-4">
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 bg-primary text-white py-3 rounded-lg font-semibold hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? 'Saving...' : 'Save Profile'}
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push(`/profile/${publicKey.toString()}`)}
-                className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-              >
-                Cancel
-              </button>
-            </div>
-
-            <p className="text-sm text-gray-500 text-center">
-              Your profile is stored off-chain. On-chain reputation (bounties won) updates automatically.
-            </p>
-          </form>
-        )}
+              <p className="text-sm text-gray-500 text-center mt-4">
+                Your profile is stored off-chain. On-chain reputation (bounties won) updates automatically.
+              </p>
+            </form>
+          )}
+        </Card>
       </div>
     </div>
   );

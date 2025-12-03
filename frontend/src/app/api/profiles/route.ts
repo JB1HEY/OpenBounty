@@ -9,12 +9,13 @@ const mockProfiles = new Map();
 export async function POST(request: NextRequest) {
   try {
     console.log('📝 POST /api/profiles - Creating/updating profile');
-    
+
     const body = await request.json();
     const {
       walletAddress,
       name,
       bio,
+      avatarUrl,
       skills,
       college,
       location,
@@ -38,6 +39,7 @@ export async function POST(request: NextRequest) {
         wallet_address: walletAddress,
         name,
         bio: bio || null,
+        avatar_url: avatarUrl || null,
         skills: skills || [],
         college: college || null,
         location: location || null,
@@ -60,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     // Real Supabase implementation
     const { createClient } = require('@supabase/supabase-js');
-    
+
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
       console.error('❌ Supabase not configured');
       return NextResponse.json(
@@ -81,6 +83,7 @@ export async function POST(request: NextRequest) {
         wallet_address: walletAddress,
         name,
         bio,
+        avatar_url: avatarUrl,
         skills,
         college,
         location,
@@ -121,7 +124,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     console.log('📖 GET /api/profiles');
-    
+
     const { searchParams } = new URL(request.url);
     const wallet = searchParams.get('wallet');
 
@@ -137,7 +140,7 @@ export async function GET(request: NextRequest) {
     if (USE_MOCK_DATA) {
       // Return mock profile
       const profile = mockProfiles.get(wallet);
-      
+
       if (profile) {
         console.log('✅ Mock profile found');
         return NextResponse.json({ profile });
@@ -149,7 +152,7 @@ export async function GET(request: NextRequest) {
 
     // Real Supabase implementation
     const { createClient } = require('@supabase/supabase-js');
-    
+
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
       console.error('❌ Supabase not configured');
       return NextResponse.json(

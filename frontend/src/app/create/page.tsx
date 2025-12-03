@@ -7,6 +7,9 @@ import { SystemProgram, LAMPORTS_PER_SOL as LAMPORTS } from '@solana/web3.js';
 import { BN } from '@coral-xyz/anchor';
 import { useProgram, getTreasuryPda, getBountyPda } from '@/hooks/useProgram';
 import { BOUNTY_CREATION_FEE } from '@/lib/constants';
+import { Card } from '@/components/ui/Card';
+import { Input, TextArea } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 
 export default function CreateBounty() {
   const { publicKey } = useWallet();
@@ -17,19 +20,19 @@ export default function CreateBounty() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    requirements: '', // NEW field
-    deliverables: '', // NEW field
+    requirements: '',
+    deliverables: '',
     skills: '',
-    category: 'development', // NEW field
+    category: 'development',
     prizeAmount: '',
-    deadline: '',
+    githubUrl: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
+
     if (!publicKey || !program) {
       setError('Please connect your wallet');
       return;
@@ -42,20 +45,16 @@ export default function CreateBounty() {
       // Convert amounts to BN
       const prizeInSol = parseFloat(formData.prizeAmount);
       const prizeInLamports = new BN(Math.floor(prizeInSol * LAMPORTS));
-      
+
       // Generate description hash
       const descriptionHash = `bounty_${Date.now()}_${publicKey.toString().slice(0, 8)}`;
-      
+
       // Get PDAs
       const [treasuryPda] = getTreasuryPda();
       const [bountyPda] = getBountyPda(publicKey, descriptionHash);
 
-      // Handle deadline
-      let deadlineTimestamp = null;
-      if (formData.deadline) {
-        const deadlineMs = new Date(formData.deadline).getTime();
-        deadlineTimestamp = new BN(Math.floor(deadlineMs / 1000));
-      }
+      // No deadline - set to null
+      const deadlineTimestamp = null;
 
       // Create bounty on-chain
       console.log('Creating bounty on-chain...');
@@ -72,17 +71,22 @@ export default function CreateBounty() {
           systemProgram: SystemProgram.programId,
         })
         .rpc({
-            skipPreflight: true,
-            commitment: 'confirmed',
-            maxRetries: 3,
+          skipPreflight: true,
+          commitment: 'confirmed',
+          maxRetries: 3,
         });
 
       console.log('Bounty created on-chain! Transaction:', tx);
 
-      // ============================================================
-      // ADD THIS: Save metadata to database
-      // ============================================================
+      // Save metadata to database
       console.log('Saving metadata to database...');
+
+      // Append Collateral Link to description if present
+      let finalDescription = formData.description;
+      if (formData.githubUrl) {
+        finalDescription += `\n\nCOLLATERAL_LINK: ${formData.githubUrl}`;
+      }
+
       try {
         const metadataResponse = await fetch('/api/bounties', {
           method: 'POST',
@@ -91,14 +95,14 @@ export default function CreateBounty() {
             bountyPubkey: bountyPda.toString(),
             companyWallet: publicKey.toString(),
             title: formData.title,
-            description: formData.description,
+            description: finalDescription,
             requirements: formData.requirements,
             deliverables: formData.deliverables,
-            skillsRequired: formData.skills 
+            skillsRequired: formData.skills
               ? formData.skills.split(',').map(s => s.trim()).filter(s => s)
               : [],
             category: formData.category,
-            deadline: formData.deadline || null,
+            deadline: null,
             prizeAmount: prizeInSol,
           }),
         });
@@ -106,20 +110,17 @@ export default function CreateBounty() {
         if (!metadataResponse.ok) {
           const errorData = await metadataResponse.json();
           console.error('Failed to save metadata:', errorData);
-          // Don't fail the whole thing if metadata save fails
           alert('Bounty created on-chain, but metadata save failed. You may need to add details later.');
         } else {
           console.log('Metadata saved successfully!');
         }
       } catch (metadataError) {
         console.error('Error saving metadata:', metadataError);
-        // Don't fail the whole thing
         alert('Bounty created on-chain, but metadata save failed. You may need to add details later.');
       }
-      // ============================================================
 
       alert(`Bounty created successfully!\n\nTransaction: ${tx}\n\nRedirecting to bounty page...`);
-      
+
       // Redirect to the bounty page
       setTimeout(() => {
         router.push(`/bounty/${bountyPda.toString()}`);
@@ -127,7 +128,7 @@ export default function CreateBounty() {
 
     } catch (err: any) {
       console.error('Error creating bounty:', err);
-      
+
       let errorMessage = 'Failed to create bounty';
       if (err.message?.includes('0x1')) {
         errorMessage = 'Insufficient funds for transaction';
@@ -136,7 +137,7 @@ export default function CreateBounty() {
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
+
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -145,200 +146,179 @@ export default function CreateBounty() {
 
   if (!publicKey) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-12">
-        <div className="bg-white rounded-lg shadow p-8 text-center">
-          <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-          <p className="text-gray-600">
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <Card className="max-w-md w-full text-center py-12">
+          <h2 className="text-2xl font-bold mb-4 text-white">Connect Your Wallet</h2>
+          <p className="text-gray-400">
             Please connect your wallet to post a bounty
           </p>
-        </div>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-12">
-      <div className="bg-white rounded-lg shadow p-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Post a Bounty</h1>
-        <p className="text-gray-600 mb-8">
-          Create a task and offer SOL as a reward
-        </p>
+    <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background">
+      <div className="max-w-3xl mx-auto">
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">Post a Bounty</h1>
+          <p className="text-gray-400">
+            Create a task and offer SOL as a reward
+          </p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Bounty Title *
-            </label>
-            <input
-              type="text"
+        <Card className="border-primary/20 shadow-[0_0_50px_rgba(59,130,246,0.1)]">
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Title */}
+            <Input
+              label="Bounty Title *"
               required
               maxLength={200}
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
               placeholder="e.g., Build a landing page for our DeFi protocol"
             />
-          </div>
 
-          {/* Category */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Category *
-            </label>
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="development">Development</option>
-              <option value="design">Design</option>
-              <option value="marketing">Marketing</option>
-              <option value="writing">Writing</option>
-              <option value="video">Video/Animation</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
+            {/* Category */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Category *
+              </label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+              >
+                <option value="development">Development</option>
+                <option value="design">Design</option>
+                <option value="marketing">Marketing</option>
+                <option value="writing">Writing</option>
+                <option value="video">Video/Animation</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description *
-            </label>
-            <textarea
-              required
-              rows={6}
-              maxLength={5000}
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-              placeholder="Describe the task, context, and what you're looking for..."
+            {/* Description */}
+            <div>
+              <TextArea
+                label="Description *"
+                required
+                rows={6}
+                maxLength={5000}
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Describe the task, context, and what you're looking for..."
+              />
+              <p className="text-xs text-gray-500 mt-1 text-right">
+                {formData.description.length} / 5000 characters
+              </p>
+            </div>
+
+            {/* Collateral / GitHub */}
+            <Input
+              label="Collateral / GitHub Repository (Optional)"
+              type="url"
+              value={formData.githubUrl}
+              onChange={(e) => setFormData({ ...formData, githubUrl: e.target.value })}
+              placeholder="https://github.com/your-org/repo"
             />
-            <p className="text-sm text-gray-500 mt-1">
-              {formData.description.length} / 5000 characters
-            </p>
-          </div>
 
-          {/* Requirements */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Requirements (Optional)
-            </label>
-            <textarea
+            {/* Requirements */}
+            <TextArea
+              label="Requirements (Optional)"
               rows={4}
               maxLength={2000}
               value={formData.requirements}
               onChange={(e) => setFormData({ ...formData, requirements: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
               placeholder="List any specific requirements or constraints..."
             />
-          </div>
 
-          {/* Deliverables */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Deliverables (Optional)
-            </label>
-            <textarea
+            {/* Deliverables */}
+            <TextArea
+              label="Deliverables (Optional)"
               rows={4}
               maxLength={2000}
               value={formData.deliverables}
               onChange={(e) => setFormData({ ...formData, deliverables: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
               placeholder="What should hunters deliver? (e.g., source code, design files, etc.)"
             />
-          </div>
 
-          {/* Skills */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Required Skills
-            </label>
-            <input
-              type="text"
-              value={formData.skills}
-              onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-              placeholder="e.g., React, Solidity, Design (comma separated)"
-            />
-            <p className="text-sm text-gray-500 mt-1">
-              Separate skills with commas
-            </p>
-          </div>
+            {/* Skills */}
+            <div>
+              <Input
+                label="Required Skills"
+                value={formData.skills}
+                onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
+                placeholder="e.g., React, Solidity, Design (comma separated)"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Separate skills with commas
+              </p>
+            </div>
 
-          {/* Prize Amount */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Prize Amount (SOL) *
-            </label>
-            <input
-              type="number"
-              required
-              min="0.01"
-              step="0.01"
-              value={formData.prizeAmount}
-              onChange={(e) => setFormData({ ...formData, prizeAmount: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-              placeholder="10.5"
-            />
-            <p className="text-sm text-gray-500 mt-1">
-              Winner receives 99%, platform takes 1% fee
-            </p>
-          </div>
+            {/* Prize Amount */}
+            <div>
+              <Input
+                label="Prize Amount (SOL) *"
+                type="number"
+                required
+                min="0.01"
+                step="0.01"
+                value={formData.prizeAmount}
+                onChange={(e) => setFormData({ ...formData, prizeAmount: e.target.value })}
+                placeholder="10.5"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Winner receives 99%, platform takes 1% fee
+              </p>
+            </div>
 
-          {/* Deadline (Optional) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Deadline (Optional)
-            </label>
-            <input
-              type="date"
-              value={formData.deadline}
-              onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-              min={new Date().toISOString().split('T')[0]}
-            />
-          </div>
-
-          {/* Fee Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="font-semibold text-blue-900 mb-2">Cost Breakdown</h3>
-            <div className="space-y-1 text-sm text-blue-800">
-              <div className="flex justify-between">
-                <span>Prize amount:</span>
-                <span>{formData.prizeAmount || '0'} SOL</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Creation fee:</span>
-                <span>{BOUNTY_CREATION_FEE} SOL</span>
-              </div>
-              <div className="flex justify-between font-semibold pt-2 border-t border-blue-300">
-                <span>Total cost:</span>
-                <span>
-                  {(parseFloat(formData.prizeAmount || '0') + BOUNTY_CREATION_FEE).toFixed(3)} SOL
-                </span>
+            {/* Fee Info */}
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-6">
+              <h3 className="font-semibold text-primary mb-4 flex items-center">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 36v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                Cost Breakdown
+              </h3>
+              <div className="space-y-3 text-sm text-gray-300">
+                <div className="flex justify-between">
+                  <span>Prize amount:</span>
+                  <span className="font-mono text-white">{formData.prizeAmount || '0'} SOL</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Creation fee:</span>
+                  <span className="font-mono text-white">{BOUNTY_CREATION_FEE} SOL</span>
+                </div>
+                <div className="flex justify-between font-bold pt-3 border-t border-primary/20 text-white text-base">
+                  <span>Total cost:</span>
+                  <span className="text-primary">
+                    {(parseFloat(formData.prizeAmount || '0') + BOUNTY_CREATION_FEE).toFixed(3)} SOL
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-red-800">{error}</p>
-            </div>
-          )}
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                <p className="text-red-400">{error}</p>
+              </div>
+            )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Creating Bounty...' : 'Post Bounty'}
-          </button>
+            <Button
+              type="submit"
+              disabled={loading}
+              isLoading={loading}
+              className="w-full text-lg py-4"
+            >
+              Post Bounty
+            </Button>
 
-          <p className="text-sm text-gray-500 text-center">
-            Note: Bounties cannot be cancelled once posted. Prize is held in escrow until completion.
-          </p>
-        </form>
+            <p className="text-sm text-gray-500 text-center">
+              Note: Bounties cannot be cancelled once posted. Prize is held in escrow until completion.
+            </p>
+          </form>
+        </Card>
       </div>
     </div>
   );
